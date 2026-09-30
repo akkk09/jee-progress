@@ -150,7 +150,7 @@ function App() {
             <button key={id} className={page === id ? "nav active" : "nav"} onClick={() => setPage(id)}>{label}</button>
           )}
         </nav>
-        <div className="sidebar-bottom">
+        <div className="sidebar-bottom"><div className="account"><span>{user.email}</span><button className="danger-link" onClick={() => supabase.auth.signOut()}>Log out</button></div>
           <label>Exam date</label>
           <input type="date" value={state.examDate} onChange={(e) => setState((s) => ({ ...s, examDate: e.target.value }))} />
           <input value={state.examName} onChange={(e) => setState((s) => ({ ...s, examName: e.target.value }))} />
