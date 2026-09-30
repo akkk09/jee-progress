@@ -297,7 +297,7 @@ function MocksPage({state,setState}:{state:AppState;setState:React.Dispatch<Reac
   return <section><div className="stats-row"><Stat label="Mocks" value={String(attempts.length)} /><Stat label="Best" value={scored.length?`${best}/${scored.find(m=>m.score===best)?.totalMarks}`:"—"} /><Stat label="Avg %" value={scored.length?`${average}%`:"—"} /></div>
     <div className="card form-card"><div className="section-title"><div><h2>Log a mock</h2><p className="muted">Record the score. Accuracy is calculated automatically.</p></div></div><div className="form-grid mock-form"><input placeholder="Mock name (optional)" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/><input type="number" min="0" placeholder="Score" value={form.score} onChange={e=>setForm({...form,score:e.target.value})}/><input type="number" min="1" placeholder="Total marks" value={form.totalMarks} onChange={e=>setForm({...form,totalMarks:e.target.value})}/><input placeholder="Notes (optional)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/><button className="primary" onClick={add}>+ Add mock</button></div>
       <details className="mistake-picker">
-        <summary><span>Chapters I got wrong</span><b>${form.wrongChapters.length} selected</b></summary>
+        <summary><span>Chapters I got wrong</span><b>{form.wrongChapters.length} selected</b></summary>
         <div className="mistake-groups">
           {subjects.map(subject=><div className="mistake-group" key={subject}>
             <div className="mistake-group-title">{subject}</div>
@@ -313,7 +313,8 @@ function MocksPage({state,setState}:{state:AppState;setState:React.Dispatch<Reac
           </div>)}
         </div>
       </details></div>
-    {attempts.length>0 && <div className="card mock-insights">
+    {attempts.length>0 && <>
+      <div className="card mock-insights">
       <div className="section-title"><div><h2>What to review next</h2><p className="muted">Recent and repeated mistakes get more weight.</p></div></div>
       {weaknesses.length===0
         ? <p className="muted">Mark wrong chapters on your mocks and this will rank the areas that keep showing up.</p>
@@ -328,6 +329,7 @@ function MocksPage({state,setState}:{state:AppState;setState:React.Dispatch<Reac
           })}</div>}
     </div>
     <div className="card"><div className="section-title"><div><h2>Score trend</h2><p className="muted">Latest 8 attempts</p></div><span className="muted">Latest: ${attempts[0].score}/${attempts[0].totalMarks}</span></div><div className="mock-trend">{trend.map(m=><div className="mock-point" key={m.id}><span>{m.score}</span><i style={{height:(Math.max(8,Math.min(140,(m.score/Math.max(m.totalMarks,1))*140)))+"px"}}/><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</small></div>)}</div></div>}
+    </>}
     <div className="card"><div className="section-title"><h2>History</h2><span className="muted">{attempts.length} attempts</span></div>{attempts.length===0?<p className="muted">Your mock results will appear here.</p>:<div className="mock-history">{attempts.map(m=><div className="mock-row" key={m.id}><div><strong>{m.name}</strong><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})}</small></div><div className="mock-score"><strong>{m.score}/{m.totalMarks}</strong><small>{Math.round(m.accuracy)}%</small></div><div className="mock-notes">{m.notes||"—"}</div><button className="danger-link" onClick={()=>remove(m.id)}>Delete</button></div>)}</div>}</div>
   </section>;
 }
