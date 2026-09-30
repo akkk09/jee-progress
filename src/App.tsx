@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { syllabus, subjects, type Chapter, type Subject } from "./data";
+import { createClient } from "@supabase/supabase-js";
+import { syllabus, subjects, type Subject } from "./data";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 type Lecture = {
   id: string;
@@ -23,22 +28,22 @@ type AppState = {
 const initialProgress = (): Progress =>
   Object.fromEntries(syllabus.map((c) => [c.id, { completed: false, pyq: { "2024": false, "2025": false, "2026": false } }]));
 
-const defaultState: AppState = {
+const makeDefaultState = (): AppState => ({
   examDate: "2027-01-24",
   examName: "JEE Main 2027",
   lectures: [],
   progress: initialProgress(),
   studySeconds: 0,
-};
+});
 
-const load = (): AppState => {
+const load = (userId: string): AppState => {
   try {
-    const saved = localStorage.getItem("jee-progress");
-    if (!saved) return defaultState;
+    const saved = localStorage.getItem(`jee-progress:${userId}`);
+    if (!saved) return makeDefaultState();
     const parsed = JSON.parse(saved) as AppState;
-    return { ...defaultState, ...parsed, progress: { ...initialProgress(), ...(parsed.progress ?? {}) } };
+    return { ...makeDefaultState(), ...parsed, progress: { ...initialProgress(), ...(parsed.progress ?? {}) } };
   } catch {
-    return defaultState;
+    return makeDefaultState();
   }
 };
 
@@ -52,14 +57,33 @@ const formatTime = (seconds: number) => {
 const daysUntil = (date: string) => Math.max(0, Math.ceil((new Date(date + "T00:00:00").getTime() - Date.now()) / 86400000));
 
 function App() {
-  const [state, setState] = useState<AppState>(load);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [state, setState] = useState<AppState>(makeDefaultState);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null);
+      if (data.session?.user) setState(load(data.session.user.id));
+      setAuthLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ? { id: session.user.id, email: session.user.email } : null);
+      if (session?.user) setState(load(session.user.id));
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
   const [page, setPage] = useState<"dashboard" | "lectures" | "syllabus" | "pyqs">("dashboard");
   const [running, setRunning] = useState(false);
   const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<Subject | "All">("All");
   const [lectureForm, setLectureForm] = useState({ title: "", subject: "Mathematics" as Subject, chapterId: syllabus[0].id, url: "", watchedMinutes: "" });
 
-  useEffect(() => localStorage.setItem("jee-progress", JSON.stringify(state)), [state]);
+  useEffect(() => { if (user) localStorage.setItem(`jee-progress:${user.id}`, JSON.stringify(state)); }, [state, user]);
 
   useEffect(() => {
     if (!running) return;
@@ -106,12 +130,16 @@ function App() {
 
   const reset = () => {
     if (window.confirm("Reset all JEE Progress data?")) {
-      setState(defaultState);
+      setState(makeDefaultState());
       setRunning(false);
     }
   };
 
   void tick;
+
+  if (authLoading) return <div className="auth-page"><div className="auth-card"><span className="brand-mark">J</span><h1>JEE Progress</h1><p>Checking your session…</p></div></div>;
+  if (!supabase) return <div className="auth-page"><div className="auth-card"><span className="brand-mark">J</span><h1>Configuration required</h1><p>Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel environment variables.</p></div></div>;
+  if (!user) return <AuthScreen />;
 
   return (
     <div className="app">
@@ -171,6 +199,40 @@ function App() {
       </main>
     </div>
   );
+}
+
+function AuthScreen() {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!supabase || !email || !password) return;
+    setBusy(true);
+    setMessage("");
+    const result = mode === "login"
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password });
+    setBusy(false);
+    if (result.error) setMessage(result.error.message);
+    else setMessage(mode === "signup" ? "Account created. Check your email if verification is enabled." : "");
+  };
+
+  return <div className="auth-page">
+    <div className="auth-card">
+      <span className="brand-mark">J</span>
+      <p className="eyebrow">PRIVATE STUDY TRACKER</p>
+      <h1>JEE Progress</h1>
+      <p className="auth-copy">Sign in to access your personal JEE dashboard.</p>
+      <div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")}>Log in</button><button className={mode === "signup" ? "selected" : ""} onClick={() => setMode("signup")}>Create account</button></div>
+      <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+      <button className="primary auth-submit" onClick={submit} disabled={busy}>{busy ? "Working…" : mode === "login" ? "Log in" : "Create account"}</button>
+      {message && <p className="auth-message">{message}</p>}
+    </div>
+  </div>;
 }
 
 function Stat({ label, value }: { label: string; value: string }) { return <div className="card stat"><span>{label}</span><strong>{value}</strong></div>; }
