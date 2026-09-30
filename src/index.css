@@ -15,3 +15,24 @@
 .mock-notes{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:850px){.hero-grid,.dashboard-grid{grid-template-columns:1fr}.mock-form{grid-template-columns:1fr 1fr}.mock-row{grid-template-columns:1fr 1fr}.mock-notes{grid-column:1/-1}}
 @media(max-width:600px){.mock-form{grid-template-columns:1fr}.mock-row{grid-template-columns:1fr 1fr}}
+
+.mistake-picker{margin-top:16px;border-top:1px solid #1b1e27;padding-top:14px}
+.mistake-picker summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:#aeb4c1;font-size:12px;list-style:none}
+.mistake-picker summary::-webkit-details-marker{display:none}
+.mistake-picker summary b{font-size:10px;color:#777d8b;font-weight:500}
+.mistake-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}
+.mistake-group-title{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#777d8b;margin-bottom:7px}
+.mistake-chapters{display:grid;gap:3px}
+.mistake-chapter{display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border:1px solid transparent;border-radius:7px;color:#858b99;font-size:11px;cursor:pointer}
+.mistake-chapter:hover{background:#151820;color:#cbd0d9}
+.mistake-chapter.selected{background:#181c25;border-color:#333946;color:#e5e7eb}
+.mistake-chapter input{margin-top:2px;accent-color:#e8e9ed}
+.mock-insights{margin-bottom:14px}
+.weakness-list{display:grid;gap:0}
+.weakness-row{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;border-top:1px solid #1b1e27;padding:11px 0}
+.weakness-row strong,.weakness-row small{display:block}
+.weakness-row small{color:#777d8b;font-size:10px;margin-top:3px}
+.weakness-rank{width:24px;height:24px;display:grid;place-items:center;border:1px solid #2c303a;border-radius:7px;color:#aeb4c1;font-size:10px}
+.weakness-reason{font-size:10px;color:#777d8b}
+@media(max-width:900px){.mistake-groups{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.mistake-groups{grid-template-columns:1fr}.weakness-row{grid-template-columns:28px 1fr}.weakness-reason{grid-column:2}}

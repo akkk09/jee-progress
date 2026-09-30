@@ -11,7 +11,7 @@ type Lecture = {
 };
 type StudySession = { id: string; date: string; startedAt: string; seconds: number; subject: Subject; chapterId: string };
 type PlanTask = { id: string; date: string; title: string; subject: Subject | ""; chapterId: string; completed: boolean };
-type MockAttempt = { id: string; name: string; date: string; score: number; totalMarks: number; accuracy: number; mathematics: number; physics: number; chemistry: number; notes: string };
+type MockAttempt = { id: string; name: string; date: string; score: number; totalMarks: number; accuracy: number; mathematics: number; physics: number; chemistry: number; notes: string; wrongChapters: string[] };
 type AppState = {
   examDate: string; examName: string; lectures: Lecture[]; progress: Progress;
   studySeconds: number; sessions: StudySession[]; tasks: PlanTask[]; mocks: MockAttempt[]; theme: "dark" | "light";
@@ -45,12 +45,17 @@ const migrateProgress = (raw: any): Progress => {
     return [c.id, { completed: Boolean(old.completed), pyq }];
   }));
 };
+const migrateMocks = (raw: any): MockAttempt[] => Array.isArray(raw) ? raw.map((m: any) => ({
+  ...m,
+  wrongChapters: Array.isArray(m.wrongChapters) ? m.wrongChapters : [],
+})) : [];
+
 const load = (userId: string): AppState => {
   try {
     const saved = localStorage.getItem(`jee-progress:${userId}`);
     if (!saved) return makeDefaultState();
     const parsed = JSON.parse(saved);
-    return { ...makeDefaultState(), ...parsed, progress: migrateProgress(parsed.progress) };
+    return { ...makeDefaultState(), ...parsed, progress: migrateProgress(parsed.progress), mocks: migrateMocks(parsed.mocks) };
   } catch { return makeDefaultState(); }
 };
 const dateKey = (d = new Date()) => {
@@ -144,7 +149,7 @@ function App() {
   };
   const importData = (file:File) => {
     const reader=new FileReader();
-    reader.onload=()=>{ try { const parsed=JSON.parse(String(reader.result)); setState({...makeDefaultState(),...parsed,progress:migrateProgress(parsed.progress)}); } catch { window.alert("That backup file is not valid JEE Progress data."); } };
+    reader.onload=()=>{ try { const parsed=JSON.parse(String(reader.result)); setState({...makeDefaultState(),...parsed,progress:migrateProgress(parsed.progress),mocks:migrateMocks(parsed.mocks)}); } catch { window.alert("That backup file is not valid JEE Progress data."); } };
     reader.readAsText(file);
   };
   const logout=()=>{setRunning(false);localStorage.removeItem("jee-progress:session");setUser(null);setState(makeDefaultState());};
@@ -250,17 +255,79 @@ function PYQCell({value,onChange}:{value:PYQRecord;onChange:(v:PYQRecord)=>void}
   return <div className="pyq-cell"><input type="checkbox" checked={value.attempted} onChange={e=>onChange({...value,attempted:e.target.checked})}/>{value.total>0&&<small>{value.correct}/{value.total}</small>}</div>;
 }
 function MocksPage({state,setState}:{state:AppState;setState:React.Dispatch<React.SetStateAction<AppState>>}) {
-  const [form,setForm]=useState({name:"",date:dateKey(),score:"",totalMarks:"300",notes:""});
+  const [form,setForm]=useState({name:"",date:dateKey(),score:"",totalMarks:"300",notes:"",wrongChapters:[] as string[]});
   const attempts=[...state.mocks].sort((a,b)=>b.date.localeCompare(a.date));
   const scored=attempts.filter(m=>m.totalMarks>0);
   const best=scored.length?Math.max(...scored.map(m=>m.score)):0;
   const average=scored.length?Math.round(scored.reduce((n,m)=>n+(m.score/m.totalMarks*100),0)/scored.length):0;
-  const add=()=>{if(form.score==="") return; const score=Math.max(0,Number(form.score)||0), totalMarks=Math.max(1,Number(form.totalMarks)||300); const attempt:MockAttempt={id:crypto.randomUUID(),name:form.name.trim()||"Full Syllabus Mock",date:form.date,score,totalMarks,accuracy:(score/totalMarks)*100,mathematics:0,physics:0,chemistry:0,notes:form.notes.trim()}; setState(s=>({...s,mocks:[attempt,...s.mocks]})); setForm(f=>({...f,name:"",score:"",notes:""}));};
+  const weaknesses=useMemo(()=>{
+    const byChapter=new Map<string,{occurrences:number;recentWeight:number}>();
+    attempts.forEach((mock,index)=>{
+      const weight=1/(index+1);
+      for(const chapterId of new Set(mock.wrongChapters ?? [])){
+        const current=byChapter.get(chapterId) ?? {occurrences:0,recentWeight:0};
+        current.occurrences+=1;
+        current.recentWeight+=weight;
+        byChapter.set(chapterId,current);
+      }
+    });
+    return [...byChapter.entries()]
+      .map(([chapterId,stats])=>({chapterId,...stats,priority:stats.recentWeight+Math.max(0,stats.occurrences-1)*0.5}))
+      .sort((a,b)=>b.priority-a.priority)
+      .slice(0,6);
+  },[attempts]);
+  const add=()=>{
+    if(form.score==="") return;
+    const score=Math.max(0,Number(form.score)||0), totalMarks=Math.max(1,Number(form.totalMarks)||300);
+    const attempt:MockAttempt={
+      id:crypto.randomUUID(),name:form.name.trim()||"Full Syllabus Mock",date:form.date,
+      score,totalMarks,accuracy:(score/totalMarks)*100,mathematics:0,physics:0,chemistry:0,
+      notes:form.notes.trim(),wrongChapters:[...form.wrongChapters]
+    };
+    setState(s=>({...s,mocks:[attempt,...s.mocks]}));
+    setForm(f=>({...f,name:"",score:"",notes:"",wrongChapters:[]}));
+  };
+  const toggleChapter=(chapterId:string)=>{
+    setForm(f=>({...f,wrongChapters:f.wrongChapters.includes(chapterId)
+      ? f.wrongChapters.filter(id=>id!==chapterId)
+      : [...f.wrongChapters,chapterId]}));
+  };
   const remove=(id:string)=>setState(s=>({...s,mocks:s.mocks.filter(m=>m.id!==id)}));
   const trend=[...attempts].slice(0,8).reverse();
   return <section><div className="stats-row"><Stat label="Mocks" value={String(attempts.length)} /><Stat label="Best" value={scored.length?`${best}/${scored.find(m=>m.score===best)?.totalMarks}`:"—"} /><Stat label="Avg %" value={scored.length?`${average}%`:"—"} /></div>
-    <div className="card form-card"><div className="section-title"><div><h2>Log a mock</h2><p className="muted">Record the score. Accuracy is calculated automatically.</p></div></div><div className="form-grid mock-form"><input placeholder="Mock name (optional)" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/><input type="number" min="0" placeholder="Score" value={form.score} onChange={e=>setForm({...form,score:e.target.value})}/><input type="number" min="1" placeholder="Total marks" value={form.totalMarks} onChange={e=>setForm({...form,totalMarks:e.target.value})}/><input placeholder="Notes (optional)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/><button className="primary" onClick={add}>+ Add mock</button></div></div>
-    {attempts.length>0 && <div className="card"><div className="section-title"><div><h2>Score trend</h2><p className="muted">Latest 8 attempts</p></div><span className="muted">Latest: {attempts[0].score}/{attempts[0].totalMarks}</span></div><div className="mock-trend">{trend.map(m=><div className="mock-point" key={m.id}><span>{m.score}</span><i style={{height:`${Math.max(8,Math.min(140,(m.score/Math.max(m.totalMarks,1))*140))}px`}}/><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</small></div>)}</div></div>}
+    <div className="card form-card"><div className="section-title"><div><h2>Log a mock</h2><p className="muted">Record the score. Accuracy is calculated automatically.</p></div></div><div className="form-grid mock-form"><input placeholder="Mock name (optional)" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/><input type="number" min="0" placeholder="Score" value={form.score} onChange={e=>setForm({...form,score:e.target.value})}/><input type="number" min="1" placeholder="Total marks" value={form.totalMarks} onChange={e=>setForm({...form,totalMarks:e.target.value})}/><input placeholder="Notes (optional)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/><button className="primary" onClick={add}>+ Add mock</button></div>
+      <details className="mistake-picker">
+        <summary><span>Chapters I got wrong</span><b>${form.wrongChapters.length} selected</b></summary>
+        <div className="mistake-groups">
+          {subjects.map(subject=><div className="mistake-group" key={subject}>
+            <div className="mistake-group-title">{subject}</div>
+            <div className="mistake-chapters">
+              {subjectChapters(subject).map(c=>{
+                const selected=form.wrongChapters.includes(c.id);
+                return <label className={selected?"mistake-chapter selected":"mistake-chapter"} key={c.id}>
+                  <input type="checkbox" checked={selected} onChange={()=>toggleChapter(c.id)}/>
+                  <span>{c.name}</span>
+                </label>;
+              })}
+            </div>
+          </div>)}
+        </div>
+      </details></div>
+    {attempts.length>0 && <div className="card mock-insights">
+      <div className="section-title"><div><h2>What to review next</h2><p className="muted">Recent and repeated mistakes get more weight.</p></div></div>
+      {weaknesses.length===0
+        ? <p className="muted">Mark wrong chapters on your mocks and this will rank the areas that keep showing up.</p>
+        : <div className="weakness-list">{weaknesses.map((w,index)=>{
+            const chapter=syllabus.find(c=>c.id===w.chapterId);
+            if(!chapter) return null;
+            return <div className="weakness-row" key={w.chapterId}>
+              <span className="weakness-rank">{index+1}</span>
+              <div><strong>{chapter.name}</strong><small>{chapter.subject} · missed in {w.occurrences} mock{w.occurrences===1?"":"s"}</small></div>
+              <span className="weakness-reason">{w.occurrences>=2?"Repeated miss":"Recent miss"}</span>
+            </div>;
+          })}</div>}
+    </div>
+    <div className="card"><div className="section-title"><div><h2>Score trend</h2><p className="muted">Latest 8 attempts</p></div><span className="muted">Latest: ${attempts[0].score}/${attempts[0].totalMarks}</span></div><div className="mock-trend">{trend.map(m=><div className="mock-point" key={m.id}><span>{m.score}</span><i style={{height:(Math.max(8,Math.min(140,(m.score/Math.max(m.totalMarks,1))*140)))+"px"}}/><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</small></div>)}</div></div>}
     <div className="card"><div className="section-title"><h2>History</h2><span className="muted">{attempts.length} attempts</span></div>{attempts.length===0?<p className="muted">Your mock results will appear here.</p>:<div className="mock-history">{attempts.map(m=><div className="mock-row" key={m.id}><div><strong>{m.name}</strong><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})}</small></div><div className="mock-score"><strong>{m.score}/{m.totalMarks}</strong><small>{Math.round(m.accuracy)}%</small></div><div className="mock-notes">{m.notes||"—"}</div><button className="danger-link" onClick={()=>remove(m.id)}>Delete</button></div>)}</div>}</div>
   </section>;
 }
