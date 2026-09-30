@@ -25,6 +25,10 @@ type AppState = {
   studySeconds: number;
 };
 
+const PYQ_YEARS = ["2024", "2025", "2026"] as const;
+const TOTAL_MODULES = syllabus.length;
+const TOTAL_PYQS = TOTAL_MODULES * PYQ_YEARS.length;
+
 const initialProgress = (): Progress =>
   Object.fromEntries(syllabus.map((c) => [c.id, { completed: false, pyq: { "2024": false, "2025": false, "2026": false } }]));
 
@@ -41,7 +45,9 @@ const load = (userId: string): AppState => {
     const saved = localStorage.getItem(`jee-progress:${userId}`);
     if (!saved) return makeDefaultState();
     const parsed = JSON.parse(saved) as AppState;
-    return { ...makeDefaultState(), ...parsed, progress: { ...initialProgress(), ...(parsed.progress ?? {}) } };
+    const defaults = makeDefaultState();
+    const progress = Object.fromEntries(syllabus.map((c) => [c.id, { ...defaults.progress[c.id], ...(parsed.progress?.[c.id] ?? {}), pyq: { ...defaults.progress[c.id].pyq, ...(parsed.progress?.[c.id]?.pyq ?? {}) } }]));
+    return { ...defaults, ...parsed, progress };
   } catch {
     return makeDefaultState();
   }
@@ -79,7 +85,6 @@ function App() {
   }, []);
   const [page, setPage] = useState<"dashboard" | "lectures" | "syllabus" | "pyqs">("dashboard");
   const [running, setRunning] = useState(false);
-  const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<Subject | "All">("All");
   const [lectureForm, setLectureForm] = useState({ title: "", subject: "Mathematics" as Subject, chapterId: syllabus[0].id, url: "", watchedMinutes: "" });
 
@@ -88,7 +93,6 @@ function App() {
   useEffect(() => {
     if (!running) return;
     const id = window.setInterval(() => {
-      setTick((v) => v + 1);
       setState((s) => ({ ...s, studySeconds: s.studySeconds + 1 }));
     }, 1000);
     return () => window.clearInterval(id);
@@ -128,6 +132,9 @@ function App() {
   const toggleLecture = (id: string) =>
     setState((s) => ({ ...s, lectures: s.lectures.map((l) => l.id === id ? { ...l, completed: !l.completed } : l) }));
 
+  const deleteLecture = (id: string) =>
+    setState((s) => ({ ...s, lectures: s.lectures.filter((l) => l.id !== id) }));
+
   const reset = () => {
     if (window.confirm("Reset all JEE Progress data?")) {
       setState(makeDefaultState());
@@ -135,7 +142,6 @@ function App() {
     }
   };
 
-  void tick;
 
   if (authLoading) return <div className="auth-page"><div className="auth-card"><span className="brand-mark">J</span><h1>JEE Progress</h1><p>Checking your session…</p></div></div>;
   if (!supabase) return <div className="auth-page"><div className="auth-card"><span className="brand-mark">J</span><h1>Configuration required</h1><p>Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel environment variables.</p></div></div>;
@@ -180,11 +186,11 @@ function App() {
             </div>
           </div>
           <div className="toolbar"><div className="tabs">{["All", ...subjects].map((s) => <button key={s} className={filter === s ? "selected" : ""} onClick={() => setFilter(s as Subject | "All")}>{s}</button>)}</div><span>{filteredLectures.length} lectures</span></div>
-          <div className="list">{filteredLectures.map((l) => <div className="card lecture" key={l.id}>
+          {filteredLectures.length === 0 ? <div className="card empty-state"><h2>No lectures yet</h2><p>Add a lecture above with its link and the time you have already watched.</p></div> : <div className="list">{filteredLectures.map((l) => <div className="card lecture" key={l.id}>
             <div className="check" onClick={() => toggleLecture(l.id)}>{l.completed ? "✓" : ""}</div>
             <div className="lecture-main"><div><span className="tag">{l.subject}</span><span className="muted">{chapter(l.chapterId).name}</span></div><h3 className={l.completed ? "done" : ""}>{l.title}</h3><a href={l.url} target="_blank" rel="noreferrer">Open lecture ↗</a></div>
-            <label className="watched">Watched <input type="number" min="0" value={l.watchedMinutes} onChange={(e) => setWatched(l.id, Number(e.target.value))} /> min</label>
-          </div>)}</div>
+            <label className="watched">Watched <input type="number" min="0" value={l.watchedMinutes} onChange={(e) => setWatched(l.id, Number(e.target.value))} /> min</label><button className="danger-link" onClick={() => deleteLecture(l.id)}>Delete</button>
+          </div>)}</div>}
         </section>}
 
         {page === "syllabus" && <section>
@@ -194,7 +200,7 @@ function App() {
 
         {page === "pyqs" && <section>
           <div className="card"><div className="subject-head"><div><h2>Past 3 years</h2><p className="muted">Check a year once you've attempted that chapter's PYQs.</p></div><b>{pyqDone}/{syllabus.length * 3}</b></div></div>
-          {subjects.map((subject) => <div className="card subject-block" key={subject}><h2>{subject}</h2><div className="pyq-head"><span>Chapter</span><span>2024</span><span>2025</span><span>2026</span></div>{syllabus.filter((c) => c.subject === subject).map((c) => <div className="pyq-row" key={c.id}><span>{c.name}</span>{(["2024", "2025", "2026"] as const).map((year) => <input key={year} type="checkbox" checked={state.progress[c.id]?.pyq[year] ?? false} onChange={(e) => updateProgress(c.id, { pyq: { ...state.progress[c.id].pyq, [year]: e.target.checked } })} />)}</div>)}</div>)}
+          {subjects.map((subject) => <div className="card subject-block" key={subject}><h2>{subject}</h2><div className="pyq-head"><span>Chapter</span><span>2024</span><span>2025</span><span>2026</span></div>{syllabus.filter((c) => c.subject === subject).map((c) => <div className="pyq-row" key={c.id}><span>{c.name}</span>{PYQ_YEARS.map((year) => <input key={year} type="checkbox" checked={state.progress[c.id]?.pyq[year] ?? false} onChange={(e) => updateProgress(c.id, { pyq: { ...state.progress[c.id].pyq, [year]: e.target.checked } })} />)}</div>)}</div>)}
         </section>}
       </main>
     </div>
@@ -243,7 +249,7 @@ function Dashboard({ days, stats, completedModules, pyqDone, lectures, studySeco
       <div className="card hero"><span className="eyebrow">COUNTDOWN</span><strong>{days}</strong><span>days until JEE</span></div>
       <div className="card timer"><span className="eyebrow">STUDY TIMER</span><strong>{formatTime(studySeconds)}</strong><button className={running ? "stop" : "primary"} onClick={() => setRunning(!running)}>{running ? "Stop timer" : "Start timer"}</button></div>
     </div>
-    <div className="stats-row"><Stat label="Modules completed" value={`${completedModules}/54`} /><Stat label="PYQs attempted" value={`${pyqDone}/162`} /><Stat label="Lecture time watched" value={`${lectures.reduce((n, l) => n + l.watchedMinutes, 0)} min`} /></div>
+    <div className="stats-row"><Stat label="Modules completed" value={`${completedModules}/${TOTAL_MODULES}`} /><Stat label="PYQs attempted" value={`${pyqDone}/${TOTAL_PYQS}`} /><Stat label="Lecture time watched" value={`${lectures.reduce((n, l) => n + l.watchedMinutes, 0)} min`} /></div>
     <div className="card"><h2>Subject progress</h2>{stats.map((s) => <div className="progress-line" key={s.subject}><div><span>{s.subject}</span><b>{s.done}/{s.total}</b></div><div className="bar"><i style={{ width: `${(s.done / s.total) * 100}%` }} /></div></div>)}</div>
   </section>;
 }

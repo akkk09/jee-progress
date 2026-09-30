@@ -1,6 +1,6 @@
 # JEE Progress
 
-A local-first JEE preparation tracker.
+A JEE preparation tracker with Supabase authentication and local browser storage.
 
 ## Features
 
@@ -12,7 +12,8 @@ A local-first JEE preparation tracker.
 - Module completion tracking
 - PYQ checkboxes for 2024, 2025 and 2026
 - Study stopwatch
-- Browser localStorage persistence
+- Browser localStorage persistence per authenticated user
+- Supabase email/password authentication
 
 ## Run
 
@@ -21,6 +22,8 @@ npm install
 npm run dev
 ```
 
-The app stores its data locally in the browser. No backend is required.
+Authentication is handled by Supabase. Study data stays in the browser for now; there is no cloud sync or database for tracker data.
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in your deployment environment before running the app.
 
 The exam date is configurable in the sidebar because the official date for the user's target attempt may change.
