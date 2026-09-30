@@ -102,9 +102,7 @@ function App() {
     const id = window.setInterval(() => setState(s => ({...s, studySeconds:s.studySeconds+1})), 1000);
     return () => window.clearInterval(id);
   }, [running]);
-  useEffect(() => {
-    document.documentElement.dataset.theme = state.theme;
-  }, [state.theme]);
+  useEffect(() => { document.documentElement.dataset.theme = state.theme; }, [state.theme]);
   const completedModules = syllabus.filter(c => state.progress[c.id]?.completed).length;
   const pyqDone = syllabus.reduce((n,c) => n + PYQ_YEARS.filter(y => state.progress[c.id]?.pyq[y]?.attempted).length, 0);
   const lectureMinutes = state.lectures.reduce((n,l) => n + l.watchedMinutes, 0);
@@ -115,9 +113,7 @@ function App() {
   }), [state.progress]);
   const filteredLectures = state.lectures.filter(l => filter === "All" || l.subject === filter);
 
-  const startTimer = () => {
-    setSessionStart(Date.now()); setRunning(true);
-  };
+  const startTimer = () => { setSessionStart(Date.now()); setRunning(true); };
   const stopTimer = () => {
     const seconds = sessionStart ? Math.max(1, Math.round((Date.now()-sessionStart)/1000)) : 1;
     const session: StudySession = { id:crypto.randomUUID(), date:dateKey(), startedAt:new Date().toISOString(), seconds, subject:sessionSubject, chapterId:sessionChapter };
@@ -183,17 +179,18 @@ function App() {
       {page==="dashboard" && <Dashboard days={daysUntil(state.examDate)} stats={subjectStats} completedModules={completedModules} pyqDone={pyqDone} lectureMinutes={lectureMinutes} attention={attention} state={state} running={running} startTimer={startTimer} stopTimer={stopTimer} sessionSubject={sessionSubject} setSessionSubject={setSessionSubject} sessionChapter={sessionChapter} setSessionChapter={setSessionChapter} nav={nav} />}
 
       {page==="lectures" && <section>
-        <div className="card form-card"><div className="section-title"><div><h2>Add lecture</h2><p className="muted">Track links and time watched. Videos always open externally.</p></div></div>
-          <div className="form-grid lecture-form">
-            <input placeholder="Lecture title" value={lectureForm.title} onChange={e=>setLectureForm({...lectureForm,title:e.target.value})}/>
-            <select value={lectureForm.subject} onChange={e=>{const subject=e.target.value as Subject;setLectureForm({...lectureForm,subject,chapterId:subjectChapters(subject)[0].id});}}>{subjects.map(s=><option key={s}>{s}</option>)}</select>
-            <select value={lectureForm.chapterId} onChange={e=>setLectureForm({...lectureForm,chapterId:e.target.value})}>{subjectChapters(lectureForm.subject).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
-            <input placeholder="YouTube / lecture link" type="url" value={lectureForm.url} onChange={e=>setLectureForm({...lectureForm,url:e.target.value})}/>
-            <input placeholder="Duration (min)" type="number" min="0" value={lectureForm.durationMinutes} onChange={e=>setLectureForm({...lectureForm,durationMinutes:e.target.value})}/>
-            <input placeholder="Watched (min)" type="number" min="0" value={lectureForm.watchedMinutes} onChange={e=>setLectureForm({...lectureForm,watchedMinutes:e.target.value})}/>
-            <select value={lectureForm.priority} onChange={e=>setLectureForm({...lectureForm,priority:e.target.value as Lecture["priority"]})}><option value="low">Low priority</option><option value="medium">Medium priority</option><option value="high">High priority</option></select>
-            <input type="date" value={lectureForm.plannedDate} onChange={e=>setLectureForm({...lectureForm,plannedDate:e.target.value})}/>
-            <button className="primary" onClick={addLecture}>+ Add lecture</button>
+        <div className="card form-card">
+          <div className="section-title"><div><h2>Add lecture</h2><p className="muted">Track links and time watched. Videos always open externally.</p></div></div>
+          <div className="lecture-form">
+            <label className="field field-title"><span>Lecture title</span><input placeholder="e.g. Kinematics L01" value={lectureForm.title} onChange={e=>setLectureForm({...lectureForm,title:e.target.value})}/></label>
+            <label className="field"><span>Subject</span><select value={lectureForm.subject} onChange={e=>{const subject=e.target.value as Subject;setLectureForm({...lectureForm,subject,chapterId:subjectChapters(subject)[0].id});}}>{subjects.map(s=><option key={s}>{s}</option>)}</select></label>
+            <label className="field"><span>Chapter</span><select value={lectureForm.chapterId} onChange={e=>setLectureForm({...lectureForm,chapterId:e.target.value})}>{subjectChapters(lectureForm.subject).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+            <label className="field field-url"><span>Lecture link</span><input placeholder="https://youtube.com/..." type="url" value={lectureForm.url} onChange={e=>setLectureForm({...lectureForm,url:e.target.value})}/></label>
+            <label className="field"><span>Duration</span><input placeholder="Minutes" type="number" min="0" value={lectureForm.durationMinutes} onChange={e=>setLectureForm({...lectureForm,durationMinutes:e.target.value})}/></label>
+            <label className="field"><span>Watched</span><input placeholder="Minutes" type="number" min="0" value={lectureForm.watchedMinutes} onChange={e=>setLectureForm({...lectureForm,watchedMinutes:e.target.value})}/></label>
+            <label className="field"><span>Priority</span><select value={lectureForm.priority} onChange={e=>setLectureForm({...lectureForm,priority:e.target.value as Lecture["priority"]})}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+            <label className="field"><span>Planned date</span><input type="date" value={lectureForm.plannedDate} onChange={e=>setLectureForm({...lectureForm,plannedDate:e.target.value})}/></label>
+            <button className="primary add-lecture-button" onClick={addLecture}>+ Add lecture</button>
           </div>
         </div>
         <div className="toolbar"><div className="tabs">{["All",...subjects].map(s=><button key={s} className={filter===s?"selected":""} onClick={()=>setFilter(s as Subject|"All")}>{s}</button>)}</div><span>{filteredLectures.length} lectures</span></div>
@@ -237,7 +234,7 @@ function Dashboard({days,stats,completedModules,pyqDone,lectureMinutes,attention
     <div className="card timer"><span className="eyebrow">STUDY TIMER</span><strong>{formatTime(state.studySeconds)}</strong><div className="timer-config"><select value={sessionSubject} onChange={e=>{const s=e.target.value as Subject;setSessionSubject(s);setSessionChapter(subjectChapters(s)[0].id)}}>{subjects.map(s=><option key={s}>{s}</option>)}</select><select value={sessionChapter} onChange={e=>setSessionChapter(e.target.value)}>{subjectChapters(sessionSubject).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><button className={running?"stop":"primary"} onClick={running?stopTimer:startTimer}>{running?"Stop & save":"Start study session"}</button></div>
   </div><div className="stats-row"><Stat label="Modules" value={`${completedModules}/${TOTAL_MODULES}`} /><Stat label="PYQ years" value={`${pyqDone}/${TOTAL_MODULES*3}`} /><Stat label="Lecture minutes" value={String(lectureMinutes)} /></div>
   <div className="dashboard-grid"><div className="card"><div className="section-title"><h2>Subject progress</h2><button className="inline-link" onClick={()=>nav("syllabus")}>Open syllabus →</button></div>{stats.map(s=><div className="progress-line" key={s.subject}><div><span>{s.subject}</span><b>{s.done}/{s.total}</b></div><div className="bar"><i style={{width:`${percent(s.done,s.total)}%`}}/></div></div>)}<p className="muted total-study">Total saved study time: {formatLongTime(totalStudy)}</p></div>
-  <div className="card"><div className="section-title"><h2>Needs attention</h2><button className="inline-link" onClick={()=>nav("syllabus")}>View chapters →</button></div><div className="attention-grid">{attention.map(x=><button className="attention-item" key={x.c.id} onClick={()=>nav("syllabus")}><span>{x.c.subject}</span><strong>{x.c.name}</strong><small>{x.c.completed?"Module complete":"Module incomplete"} · {x.attempted}/3 PYQ years</small></button>)}</div></div></div>
+  <div className="card attention-card"><div className="section-title"><div><h2>Needs attention</h2><p className="muted">Chapters with the most unfinished work.</p></div><button className="inline-link" onClick={()=>nav("syllabus")}>View chapters →</button></div><div className="attention-grid">{attention.map(x=><button className="attention-item" key={x.c.id} onClick={()=>nav("syllabus")}><span>{x.c.subject}</span><strong>{x.c.name}</strong><small>{x.c.completed?"Module complete":"Module incomplete"} · {x.attempted}/3 PYQ years</small></button>)}</div></div></div>
   </section>;
 }
 function ChapterView({chapterId,state,updateProgress,lectures,openLecture}:{chapterId:string;state:AppState;updateProgress:(id:string,p:Partial<Progress[string]>)=>void;lectures:Lecture[];openLecture:()=>void}) {
@@ -281,7 +278,7 @@ function HistoryPage({state}:{state:AppState}) {
   </section>;
 }
 function SettingsPage({state,setState,exportData,importRef,importData,reset}:{state:AppState;setState:React.Dispatch<React.SetStateAction<AppState>>;exportData:()=>void;importRef:React.RefObject<HTMLInputElement|null>;importData:(f:File)=>void;reset:()=>void}) {
-  return <section><div className="settings-grid"><div className="card"><h2>Appearance</h2><label className="setting-row">Theme<select value={state.theme} onChange={e=>setState(s=>({...s,theme:e.target.value as "dark"|"light"}))}><option value="dark">Dark</option><option value="light">Light</option></select></label></div>
+  return <section><div className="settings-grid"><div className="card"><h2>Appearance</h2><label className="setting-row">Theme<select value={state.theme} onChange={e=>setState(s=>({...s,theme:e.target.value as "dark"|"light"}))}><option value="dark">Dark</option><option value="light">Light</option></label></div>
     <div className="card"><h2>Exam</h2><label className="setting-row">Exam name<input value={state.examName} onChange={e=>setState(s=>({...s,examName:e.target.value}))}/></label><label className="setting-row">Exam date<input type="date" value={state.examDate} onChange={e=>setState(s=>({...s,examDate:e.target.value}))}/></label></div>
     <div className="card"><h2>Backup</h2><p className="muted">Export your local data before clearing browser storage or changing devices.</p><div className="button-row"><button className="primary" onClick={exportData}>Export JSON</button><button className="secondary" onClick={()=>importRef.current?.click()}>Import JSON</button><input ref={importRef} hidden type="file" accept=".json,application/json" onChange={e=>e.target.files?.[0]&&importData(e.target.files[0])}/></div></div>
     <div className="card danger-card"><h2>Reset</h2><p className="muted">This clears this account's lectures, progress, plans and study history.</p><button className="danger-button" onClick={reset}>Reset all data</button></div></div></section>;
