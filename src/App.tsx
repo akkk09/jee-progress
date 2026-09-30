@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { syllabus, subjects, type Subject } from "./data";
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 type Lecture = {
   id: string;
@@ -62,33 +57,39 @@ const formatTime = (seconds: number) => {
 
 const daysUntil = (date: string) => Math.max(0, Math.ceil((new Date(date + "T00:00:00").getTime() - Date.now()) / 86400000));
 
-function App() {
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [state, setState] = useState<AppState>(makeDefaultState);
+function hashPassword(password: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < password.length; i++) {
+    hash ^= password.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
 
-  useEffect(() => {
-    if (!supabase) {
-      setAuthLoading(false);
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null);
-      if (data.session?.user) setState(load(data.session.user.id));
-      setAuthLoading(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ? { id: session.user.id, email: session.user.email } : null);
-      if (session?.user) setState(load(session.user.id));
-    });
-    return () => listener.subscription.unsubscribe();
-  }, []);
+type Account = { id: string; email: string; passwordHash: string };
+
+const getAccounts = (): Account[] => {
+  try {
+    return JSON.parse(localStorage.getItem("jee-progress:accounts") ?? "[]") as Account[];
+  } catch {
+    return [];
+  }
+};
+
+function App() {
+  const [user, setUser] = useState<Account | null>(() => {
+    const id = localStorage.getItem("jee-progress:session");
+    return getAccounts().find((account) => account.id === id) ?? null;
+  });
+  const [state, setState] = useState<AppState>(() => user ? load(user.id) : makeDefaultState());
   const [page, setPage] = useState<"dashboard" | "lectures" | "syllabus" | "pyqs">("dashboard");
   const [running, setRunning] = useState(false);
   const [filter, setFilter] = useState<Subject | "All">("All");
   const [lectureForm, setLectureForm] = useState({ title: "", subject: "Mathematics" as Subject, chapterId: syllabus[0].id, url: "", watchedMinutes: "" });
 
-  useEffect(() => { if (user) localStorage.setItem(`jee-progress:${user.id}`, JSON.stringify(state)); }, [state, user]);
+  useEffect(() => {
+    if (user) localStorage.setItem(`jee-progress:${user.id}`, JSON.stringify(state));
+  }, [state, user]);
 
   useEffect(() => {
     if (!running) return;
@@ -135,6 +136,13 @@ function App() {
   const deleteLecture = (id: string) =>
     setState((s) => ({ ...s, lectures: s.lectures.filter((l) => l.id !== id) }));
 
+  const logout = () => {
+    setRunning(false);
+    localStorage.removeItem("jee-progress:session");
+    setUser(null);
+    setState(makeDefaultState());
+  };
+
   const reset = () => {
     if (window.confirm("Reset all JEE Progress data?")) {
       setState(makeDefaultState());
@@ -142,10 +150,11 @@ function App() {
     }
   };
 
-
-  if (authLoading) return <div className="auth-page"><div className="auth-card"><span className="brand-mark">J</span><h1>JEE Progress</h1><p>Checking your session…</p></div></div>;
-  if (!supabase) return <div className="auth-page"><div className="auth-card"><span className="brand-mark">J</span><h1>Configuration required</h1><p>Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel environment variables.</p></div></div>;
-  if (!user) return <AuthScreen />;
+  if (!user) return <AuthScreen onLogin={(account) => {
+    localStorage.setItem("jee-progress:session", account.id);
+    setUser(account);
+    setState(load(account.id));
+  }} />;
 
   return (
     <div className="app">
@@ -156,7 +165,7 @@ function App() {
             <button key={id} className={page === id ? "nav active" : "nav"} onClick={() => setPage(id)}>{label}</button>
           )}
         </nav>
-        <div className="sidebar-bottom"><div className="account"><span>{user.email}</span><button className="danger-link" onClick={() => supabase.auth.signOut()}>Log out</button></div>
+        <div className="sidebar-bottom"><div className="account"><span>{user.email}</span><button className="danger-link" onClick={logout}>Log out</button></div>
           <label>Exam date</label>
           <input type="date" value={state.examDate} onChange={(e) => setState((s) => ({ ...s, examDate: e.target.value }))} />
           <input value={state.examName} onChange={(e) => setState((s) => ({ ...s, examName: e.target.value }))} />
@@ -207,23 +216,38 @@ function App() {
   );
 }
 
-function AuthScreen() {
+function AuthScreen({ onLogin }: { onLogin: (account: Account) => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
-    if (!supabase || !email || !password) return;
-    setBusy(true);
-    setMessage("");
-    const result = mode === "login"
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-    setBusy(false);
-    if (result.error) setMessage(result.error.message);
-    else setMessage(mode === "signup" ? "Account created. Check your email if verification is enabled." : "");
+  const submit = () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || password.length < 4) {
+      setMessage("Enter an email and a password with at least 4 characters.");
+      return;
+    }
+
+    const accounts = getAccounts();
+    const existing = accounts.find((account) => account.email === normalizedEmail);
+
+    if (mode === "signup") {
+      if (existing) {
+        setMessage("An account with that email already exists.");
+        return;
+      }
+      const account: Account = { id: crypto.randomUUID(), email: normalizedEmail, passwordHash: hashPassword(password) };
+      localStorage.setItem("jee-progress:accounts", JSON.stringify([...accounts, account]));
+      onLogin(account);
+      return;
+    }
+
+    if (!existing || existing.passwordHash !== hashPassword(password)) {
+      setMessage("Invalid email or password.");
+      return;
+    }
+    onLogin(existing);
   };
 
   return <div className="auth-page">
@@ -231,11 +255,11 @@ function AuthScreen() {
       <span className="brand-mark">J</span>
       <p className="eyebrow">PRIVATE STUDY TRACKER</p>
       <h1>JEE Progress</h1>
-      <p className="auth-copy">Sign in to access your personal JEE dashboard.</p>
-      <div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")}>Log in</button><button className={mode === "signup" ? "selected" : ""} onClick={() => setMode("signup")}>Create account</button></div>
+      <p className="auth-copy">Log in to access your personal JEE dashboard.</p>
+      <div className="auth-tabs"><button className={mode === "login" ? "selected" : ""} onClick={() => { setMode("login"); setMessage(""); }}>Log in</button><button className={mode === "signup" ? "selected" : ""} onClick={() => { setMode("signup"); setMessage(""); }}>Create account</button></div>
       <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
       <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-      <button className="primary auth-submit" onClick={submit} disabled={busy}>{busy ? "Working…" : mode === "login" ? "Log in" : "Create account"}</button>
+      <button className="primary auth-submit" onClick={submit}>{mode === "login" ? "Log in" : "Create account"}</button>
       {message && <p className="auth-message">{message}</p>}
     </div>
   </div>;
