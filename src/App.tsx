@@ -85,7 +85,7 @@ function App() {
     return getAccounts().find(a => a.id === id) ?? null;
   });
   const [state, setState] = useState<AppState>(() => user ? load(user.id) : makeDefaultState());
-  const [page, setPage] = useState<"dashboard"|"lectures"|"syllabus"|"pyqs"|"plan"|"history"|"settings">("dashboard");
+  const [page, setPage] = useState<"dashboard"|"lectures"|"syllabus"|"pyqs"|"mocks"|"plan"|"history"|"settings">("dashboard");
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [filter, setFilter] = useState<Subject | "All">("All");
   const [lectureForm, setLectureForm] = useState({ title:"", subject:"Mathematics" as Subject, chapterId:syllabus[0].id, url:"", watchedMinutes:"", durationMinutes:"", priority:"medium" as Lecture["priority"], plannedDate:"" });
