@@ -11,9 +11,10 @@ type Lecture = {
 };
 type StudySession = { id: string; date: string; startedAt: string; seconds: number; subject: Subject; chapterId: string };
 type PlanTask = { id: string; date: string; title: string; subject: Subject | ""; chapterId: string; completed: boolean };
+type MockAttempt = { id: string; name: string; date: string; score: number; totalMarks: number; accuracy: number; mathematics: number; physics: number; chemistry: number; notes: string };
 type AppState = {
   examDate: string; examName: string; lectures: Lecture[]; progress: Progress;
-  studySeconds: number; sessions: StudySession[]; tasks: PlanTask[]; theme: "dark" | "light";
+  studySeconds: number; sessions: StudySession[]; tasks: PlanTask[]; mocks: MockAttempt[]; theme: "dark" | "light";
 };
 
 const PYQ_YEARS: PYQYear[] = ["2024", "2025", "2026"];
@@ -28,7 +29,7 @@ const initialProgress = (): Progress => Object.fromEntries(
 );
 const makeDefaultState = (): AppState => ({
   examDate: "2027-01-24", examName: "JEE Main 2027", lectures: [],
-  progress: initialProgress(), studySeconds: 0, sessions: [], tasks: [], theme: "dark"
+  progress: initialProgress(), studySeconds: 0, sessions: [], tasks: [], mocks: [], theme: "dark"
 });
 
 const migrateProgress = (raw: any): Progress => {
@@ -189,7 +190,7 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><span>J</span><div><strong>JEE Progress</strong><small>your prep dashboard</small></div></div>
       <nav>{[
-        ["dashboard","Dashboard"],["lectures","Lectures"],["syllabus","Syllabus"],["pyqs","PYQs"],["plan","Daily plan"],["history","History"],["settings","Settings"]
+        ["dashboard","Dashboard"],["lectures","Lectures"],["syllabus","Syllabus"],["pyqs","PYQs"],["mocks","Mocks"],["plan","Daily plan"],["history","History"],["settings","Settings"]
       ].map(([id,label])=><button key={id} className={page===id?"nav active":"nav"} onClick={()=>nav(id as typeof page)}>{label}</button>)}</nav>
       <div className="sidebar-bottom">
         <div className="account"><span>{user.email}</span><button className="danger-link" onClick={logout}>Log out</button></div>
@@ -199,7 +200,7 @@ function App() {
       </div>
     </aside>
     <main>
-      <header><div><p className="eyebrow">{state.examName}</p><h1>{selectedChapter && page==="syllabus" ? chapterName(selectedChapter) : ({dashboard:"Dashboard",lectures:"Lectures",syllabus:"Syllabus",pyqs:"PYQs",plan:"Daily plan",history:"Study history",settings:"Settings"} as Record<string,string>)[page]}</h1></div><div className="countdown"><b>{daysUntil(state.examDate)}</b><span>days left</span></div></header>
+      <header><div><p className="eyebrow">{state.examName}</p><h1>{selectedChapter && page==="syllabus" ? chapterName(selectedChapter) : ({dashboard:"Dashboard",lectures:"Lectures",syllabus:"Syllabus",pyqs:"PYQs",mocks:"Full-syllabus mocks",plan:"Daily plan",history:"Study history",settings:"Settings"} as Record<string,string>)[page]}</h1></div><div className="countdown"><b>{daysUntil(state.examDate)}</b><span>days left</span></div></header>
 
       {page==="dashboard" && <Dashboard days={daysUntil(state.examDate)} stats={subjectStats} completedModules={completedModules} pyqDone={pyqDone} lectureMinutes={lectureMinutes} todayTasks={todayTasks} todaySeconds={todaySeconds} attention={attention} state={state} running={running} startTimer={startTimer} stopTimer={stopTimer} sessionSubject={sessionSubject} setSessionSubject={setSessionSubject} sessionChapter={sessionChapter} setSessionChapter={setSessionChapter} nav={nav} />}
 
@@ -237,6 +238,8 @@ function App() {
             {subjectChapters(subject).map(c=><button className="chapter-row clickable" key={c.id} onClick={()=>openChapter(c.id)}><input type="checkbox" checked={state.progress[c.id]?.completed??false} onChange={e=>{e.stopPropagation();updateProgress(c.id,{completed:e.target.checked})}} onClick={e=>e.stopPropagation()}/><span>{c.name}</span><small>{state.lectures.filter(l=>l.chapterId===c.id&&l.completed).length} lectures · {PYQ_YEARS.filter(y=>state.progress[c.id]?.pyq[y]?.attempted).length}/3 PYQ years</small></button>)}
           </div>)}
         </section>)}
+
+      {page==="mocks" && <MocksPage state={state} setState={setState} />}
 
       {page==="pyqs" && <section><div className="card"><div className="section-title"><div><h2>Past 3 years</h2><p className="muted">Check a year when attempted; add question counts and correct answers for accuracy.</p></div><b>{pyqDone}/{TOTAL_MODULES*3}</b></div></div>
         {subjects.map(subject=><div className="card subject-block" key={subject}><h2>{subject}</h2><div className="pyq-head"><span>Chapter</span><span>2024</span><span>2025</span><span>2026</span></div>
@@ -280,6 +283,54 @@ function ChapterView({chapterId,state,updateProgress,lectures,openLecture}:{chap
 function PYQCell({value,onChange}:{value:PYQRecord;onChange:(v:PYQRecord)=>void}) {
   return <div className="pyq-cell"><input type="checkbox" checked={value.attempted} onChange={e=>onChange({...value,attempted:e.target.checked})}/>{value.total>0&&<small>{value.correct}/{value.total}</small>}</div>;
 }
+function MocksPage({state,setState}:{state:AppState;setState:React.Dispatch<React.SetStateAction<AppState>>}) {
+  const [form,setForm]=useState({name:"Full Syllabus Mock",date:dateKey(),score:"",totalMarks:"300",accuracy:"",mathematics:"",physics:"",chemistry:"",notes:""});
+  const attempts=[...state.mocks].sort((a,b)=>b.date.localeCompare(a.date));
+  const scored=attempts.filter(m=>m.totalMarks>0);
+  const best=scored.length?Math.max(...scored.map(m=>m.score)):0;
+  const average=scored.length?Math.round(scored.reduce((n,m)=>n+m.score,0)/scored.length):0;
+  const latest=scored[0];
+  const add=()=>{
+    const score=Number(form.score)||0,totalMarks=Math.max(1,Number(form.totalMarks)||300);
+    const accuracy=form.accuracy==="" ? (score/totalMarks)*100 : Math.min(100,Math.max(0,Number(form.accuracy)));
+    const attempt:MockAttempt={id:crypto.randomUUID(),name:form.name.trim()||"Full Syllabus Mock",date:form.date,score,totalMarks,accuracy,
+      mathematics:Number(form.mathematics)||0,physics:Number(form.physics)||0,chemistry:Number(form.chemistry)||0,notes:form.notes.trim()};
+    setState(s=>({...s,mocks:[attempt,...s.mocks]}));
+    setForm(f=>({...f,name:"Full Syllabus Mock",score:"",accuracy:"",mathematics:"",physics:"",chemistry:"",notes:""}));
+  };
+  const remove=(id:string)=>setState(s=>({...s,mocks:s.mocks.filter(m=>m.id!==id)}));
+  const trend=[...attempts].slice(0,8).reverse();
+  return <section>
+    <div className="stats-row"><Stat label="Mocks attempted" value={String(attempts.length)} /><Stat label="Best score" value={scored.length?`${best}/${scored.find(m=>m.score===best)?.totalMarks}`:"—"} /><Stat label="Average score" value={scored.length?`${average}`:"—"} /></div>
+    <div className="card form-card"><div className="section-title"><div><h2>Log a full-syllabus mock</h2><p className="muted">Record the result after each complete-syllabus test. Subject scores are optional.</p></div></div>
+      <div className="form-grid mock-form">
+        <input placeholder="Mock name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
+        <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+        <input type="number" min="0" placeholder="Score" value={form.score} onChange={e=>setForm({...form,score:e.target.value})}/>
+        <input type="number" min="1" placeholder="Total marks" value={form.totalMarks} onChange={e=>setForm({...form,totalMarks:e.target.value})}/>
+        <input type="number" min="0" max="100" placeholder="Accuracy %" value={form.accuracy} onChange={e=>setForm({...form,accuracy:e.target.value})}/>
+        <input type="number" min="0" placeholder="Maths score" value={form.mathematics} onChange={e=>setForm({...form,mathematics:e.target.value})}/>
+        <input type="number" min="0" placeholder="Physics score" value={form.physics} onChange={e=>setForm({...form,physics:e.target.value})}/>
+        <input type="number" min="0" placeholder="Chemistry score" value={form.chemistry} onChange={e=>setForm({...form,chemistry:e.target.value})}/>
+        <input placeholder="Notes / mistakes to review" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/>
+        <button className="primary" onClick={add}>+ Log mock</button>
+      </div>
+    </div>
+    {attempts.length>0 && <div className="card"><div className="section-title"><div><h2>Score trend</h2><p className="muted">Latest 8 attempts, oldest to newest.</p></div>{latest&&<span className="muted">Latest: {latest.score}/{latest.totalMarks}</span>}</div>
+      <div className="mock-trend">{trend.map((m,i)=><div className="mock-point" key={m.id}><span>{m.score}</span><i style={{height:`${Math.max(8,Math.min(150,(m.score/Math.max(m.totalMarks,1))*150))}px`}}/><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</small></div>)}</div>
+    </div>}
+    <div className="card"><div className="section-title"><h2>Mock history</h2><span className="muted">{attempts.length} attempts</span></div>
+      {attempts.length===0?<p className="muted">No full-syllabus mocks logged yet.</p>:<div className="mock-history">{attempts.map(m=><div className="mock-row" key={m.id}>
+        <div><strong>{m.name}</strong><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})}</small></div>
+        <div className="mock-score"><strong>{m.score}/{m.totalMarks}</strong><small>{Math.round(m.accuracy)}% accuracy</small></div>
+        <div className="mock-subjects"><span>M {m.mathematics||"—"}</span><span>P {m.physics||"—"}</span><span>C {m.chemistry||"—"}</span></div>
+        <div className="mock-notes">{m.notes||"No notes"}</div>
+        <button className="danger-link" onClick={()=>remove(m.id)}>Delete</button>
+      </div>)}</div>}
+    </div>
+  </section>;
+}
+
 function PlanPage({state,setState,taskForm,setTaskForm,addTask}:{state:AppState;setState:React.Dispatch<React.SetStateAction<AppState>>;taskForm:any;setTaskForm:any;addTask:()=>void}) {
   const dates=[0,1,2,3,4,5,6].map(i=>{const d=new Date();d.setDate(d.getDate()+i);return dateKey(d);});
   return <section><div className="card form-card"><h2>Add task</h2><div className="form-grid plan-form"><input placeholder="e.g. Finish Rotational Motion L07" value={taskForm.title} onChange={e=>setTaskForm({...taskForm,title:e.target.value})}/><select value={taskForm.subject} onChange={e=>{const s=e.target.value as Subject|"";setTaskForm({...taskForm,subject:s,chapterId:s?subjectChapters(s)[0].id:""})}}><option value="">Any subject</option>{subjects.map(s=><option key={s}>{s}</option>)}</select>{taskForm.subject&&<select value={taskForm.chapterId} onChange={e=>setTaskForm({...taskForm,chapterId:e.target.value})}>{subjectChapters(taskForm.subject).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}<input type="date" value={taskForm.date} onChange={e=>setTaskForm({...taskForm,date:e.target.value})}/><button className="primary" onClick={addTask}>+ Add task</button></div></div>

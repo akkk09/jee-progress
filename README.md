@@ -17,6 +17,7 @@ A local-first JEE preparation dashboard built around the daily workflow: plan wh
 - Persistent study sessions with subject/chapter
 - 7-day study history and recent sessions
 - Needs-attention view based on your own completion/PYQ data
+- Full-syllabus mock test tracker with score trends and subject breakdowns
 - Search/command palette with Ctrl/Cmd+K
 - Dark/light theme
 - JSON export/import backups
