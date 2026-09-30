@@ -328,8 +328,7 @@ function MocksPage({state,setState}:{state:AppState;setState:React.Dispatch<Reac
             </div>;
           })}</div>}
     </div>
-    <div className="card"><div className="section-title"><div><h2>Score trend</h2><p className="muted">Latest 8 attempts</p></div><span className="muted">Latest: ${attempts[0].score}/${attempts[0].totalMarks}</span></div><div className="mock-trend">{trend.map(m=><div className="mock-point" key={m.id}><span>{m.score}</span><i style={{height:(Math.max(8,Math.min(140,(m.score/Math.max(m.totalMarks,1))*140)))+"px"}}/><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</small></div>)}</div></div>}
-    </>}
+    <div className="card"><div className="section-title"><div><h2>Score trend</h2><p className="muted">Latest 8 attempts</p></div><span className="muted">Latest: {attempts[0].score}/{attempts[0].totalMarks}</span></div><div className="mock-trend">{trend.map(m=><div className="mock-point" key={m.id}><span>{m.score}</span><i style={{height:(Math.max(8,Math.min(140,(m.score/Math.max(m.totalMarks,1))*140)))+"px"}}/><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</small></div>)}</div></div></>}
     <div className="card"><div className="section-title"><h2>History</h2><span className="muted">{attempts.length} attempts</span></div>{attempts.length===0?<p className="muted">Your mock results will appear here.</p>:<div className="mock-history">{attempts.map(m=><div className="mock-row" key={m.id}><div><strong>{m.name}</strong><small>{new Date(m.date+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})}</small></div><div className="mock-score"><strong>{m.score}/{m.totalMarks}</strong><small>{Math.round(m.accuracy)}%</small></div><div className="mock-notes">{m.notes||"—"}</div><button className="danger-link" onClick={()=>remove(m.id)}>Delete</button></div>)}</div>}</div>
   </section>;
 }
